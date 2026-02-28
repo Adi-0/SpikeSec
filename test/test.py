@@ -1,6 +1,8 @@
 # SPDX-FileCopyrightText: © 2024 Tiny Tapeout
 # SPDX-License-Identifier: Apache-2.0
 
+#PUF testbench
+
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles
@@ -13,29 +15,35 @@ async def reset_dut(dut):
     dut.uio_in.value = 0
     await ClockCycles(dut.clk, 5)
     dut.rst_n.value = 1
-    await ClockCycles(dut.clk, 1)
+    await ClockCycles(dut.clk, 2)
 
 async def run_challenge(dut, challenge, trim=0):
     """challenge and return 8-bit response."""
+    uio_base = (trim << 1) & 0x1E
+
     dut.ui_in.value = challenge
-    dut.uio_in.value = (trim << 1) & 0x1E  # bits [4:1]
+    dut.uio_in.value = uio_base
     await ClockCycles(dut.clk, 1)
 
     # assert start (uio_in[0] = 1)
-    dut.uio_in.value = ((trim << 1) & 0x1E) | 0x01
+    dut.uio_in.value = uio_base | 0x01
     await ClockCycles(dut.clk, 1)
 
+    done = False
     for _ in range(50):
         await ClockCycles(dut.clk, 1)
-        if dut.uio_out.value & 0x01:
-            break
-    else:
-        assert False, "timed out waiting for done"
+        try:
+            if int(dut.uio_out.value) & 0x01:
+                done = True
+                break
+        except ValueError:
+            continue
+    assert done, "Timed out waiting for done"
 
     response = int(dut.uo_out.value)
 
-    dut.uio_in.value = (trim << 1) & 0x1E
-    await ClockCycles(dut.clk, 2)
+    dut.uio_in.value = uio_base
+    await ClockCycles(dut.clk, 3)
 
     return response
 
@@ -49,12 +57,12 @@ async def test_basic_operation(dut):
 
     response = await run_challenge(dut, challenge=0xA5, trim=0)
     dut._log.info(f"challenge=0xA5, trim=0 -> response=0x{response:02X}")
-    assert response != 0, "should be non-zero for non-zero challenge"
+    assert response != 0
 
 
 @cocotb.test()
 async def test_reproducibility(dut):
-    """Same challenge and trim (must produce same response)"""
+    """Same inputs produce indentical outputs"""
     clock = Clock(dut.clk, 10, units="us")
     cocotb.start_soon(clock.start())
     await reset_dut(dut)
@@ -92,10 +100,9 @@ async def test_process_sensitivity(dut):
     cocotb.start_soon(clock.start())
     await reset_dut(dut)
 
-    challenge = 0xA5
     responses = []
     for trim in [0, 4, 8, 15]:
-        r = await run_challenge(dut, challenge=challenge, trim=trim)
+        r = await run_challenge(dut, challenge=0xA5, trim=trim)
         responses.append(r)
         dut._log.info(f"trim={trim:2d} -> response=0x{r:02X}")
 
