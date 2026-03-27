@@ -28,3 +28,5 @@ The following RTL is written in SystemVerilog, and follows the lowRISC coding co
 Two files are responsible for the project: 
 - neuron_lif.v: The combinational LIF neuron module
 - project.v: The top-level state machine that took 4 instances of neuron_lif
+
+> This project was built on top of the TinyTapeout template, and was my submission for the open ended chip design project in ECE110 at the University of California, Santa Cruz. Thank you for checking this out!
